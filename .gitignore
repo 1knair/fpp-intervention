@@ -1,2 +1,43 @@
-/data/
+# Local environments and datasets
 /.venv/
+/data/
+/dataset/
+/datasets/
+/local_data/
+/raw_data/
+
+# Raw simulator and video exports (never commit participant data)
+*.plt
+*.PLT
+*.mp4
+*.MP4
+*.hdr
+*.HDR
+/FPP Participant Data/
+/Fermented Papaya and Driving Study*/
+
+# Local configuration and generated analysis output
+.env
+.env.*
+/outputs/
+/results/
+
+# Python/editor/test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest_tmp/
+/test_output*
+/test_results*
+/pytest_output*
+.coverage*
+/coverage.xml
+/junit.xml
+/pytest-report.xml
+htmlcov/
+.idea/
+.vscode/
+
+# Operating system metadata
+.DS_Store
+Thumbs.db
