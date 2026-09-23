@@ -9,7 +9,7 @@ from pathlib import Path
 
 # These helpers locate participants and run the processing pipeline.
 from src.data_loader import get_data_root, get_participants
-from src.pipeline import process_dataset
+from src.pipeline import export_cleaned_dataset, process_dataset
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +44,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # Save the processed summaries instead of printing them to the terminal.
     parser.add_argument("--output", type=Path, help="Write summaries to this CSV.")
+    parser.add_argument(
+        "--clean-output",
+        type=Path,
+        help="Write cleaned row-level CSV files and a cleaning report here.",
+    )
     return parser
 
 
@@ -73,9 +78,21 @@ def main() -> None:
     # Protect raw data by refusing to place generated output anywhere inside it.
     if args.output and _is_within(args.output, data_root):
         raise ValueError("Refusing to write output inside the raw dataset root")
+    if args.clean_output and _is_within(args.clean_output, data_root):
+        raise ValueError("Refusing to write output inside the raw dataset root")
 
     # None means all participants; otherwise pass the one requested ID as a list.
     participant_ids = None if args.all else [args.participant]
+
+    if args.clean_output:
+        report = export_cleaned_dataset(
+            data_root,
+            args.clean_output,
+            participant_ids,
+        )
+        print(f"Wrote {len(report)} cleaned drive file(s) to {args.clean_output}")
+        if not args.output:
+            return
 
     # Pass the resolved root and either a list of IDs or None (meaning all IDs).
     summaries = process_dataset(data_root, participant_ids)
