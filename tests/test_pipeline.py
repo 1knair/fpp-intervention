@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.pipeline import process_dataset
+from src.cleaning.pipeline import process_dataset
 
 
 def test_pipeline_streams_one_synthetic_drive(tmp_path: Path) -> None:
