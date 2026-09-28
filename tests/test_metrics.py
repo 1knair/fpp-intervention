@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.metrics import MetricAccumulator
+from src.cleaning.metrics import MetricAccumulator
 
 
 def synthetic_drive() -> pd.DataFrame:
