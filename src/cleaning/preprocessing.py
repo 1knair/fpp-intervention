@@ -4,7 +4,7 @@ The helpers in this file validate input columns and select active driving rows
 without changing the original pandas DataFrame.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 import pandas as pd
 
@@ -60,18 +60,21 @@ def replace_headway_sentinel(series: pd.Series) -> pd.Series:
     return series.mask(series.eq(HEADWAY_SENTINEL))
 
 
-def clean_analysis_columns(frame: pd.DataFrame) -> pd.DataFrame:
-    """Return numeric, finite analysis columns without modifying ``frame``.
+def clean_analysis_columns(
+    frame: pd.DataFrame,
+    columns: Sequence[str] = ANALYSIS_COLUMNS,
+) -> pd.DataFrame:
+    """Return numeric, finite selected columns without modifying ``frame``.
 
     Invalid numeric text and positive or negative infinity become missing. A
     no-lead Headway Distance clears both headway fields on that row. Brake force
     is never clipped; a boolean column flags values above 170 N. Collision and
     Reaction Time remain row-level signals and are not aggregated.
     """
-    validate_required_columns(frame, ANALYSIS_COLUMNS)
-    cleaned = frame.loc[:, ANALYSIS_COLUMNS].copy()
+    validate_required_columns(frame, columns)
+    cleaned = frame.loc[:, list(columns)].copy()
 
-    for column in ANALYSIS_COLUMNS:
+    for column in columns:
         numeric = pd.to_numeric(cleaned[column], errors="coerce")
         cleaned[column] = numeric.where(
             numeric.notna() & numeric.ne(float("inf")) & numeric.ne(float("-inf"))

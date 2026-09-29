@@ -15,6 +15,7 @@ from src.cleaning.data_loader import (
     TelemetryFileError,
     discover_drive_files,
     iter_plt_chunks,
+    load_header_mapping,
     load_headers,
 )
 from src.cleaning.metrics import MetricAccumulator, REQUIRED_SUMMARY_COLUMNS
@@ -42,14 +43,13 @@ OUTPUT_COLUMNS = [
     "max_velocity",
 ]
 
-CLEANED_OUTPUT_COLUMNS = [
+CLEANED_METADATA_COLUMNS = [
     "participant_id",
     "visit",
     "session_date",
     "drive",
-    *ANALYSIS_COLUMNS,
-    "brake_force_over_170",
 ]
+CLEANED_DERIVED_COLUMNS = ["brake_force_over_170"]
 
 CLEANING_REPORT_COLUMNS = [
     "participant_id",
@@ -150,6 +150,25 @@ def _clean_output_name(drive_file: DriveFile) -> str:
     return f"participant_{participant}_{visit}_{date}_drive_{drive}_cleaned.csv"
 
 
+def _cleaned_output_columns(column_names: Sequence[str]) -> list[str]:
+    """Return metadata, header-defined telemetry, and derived output columns."""
+    return [*CLEANED_METADATA_COLUMNS, *column_names, *CLEANED_DERIVED_COLUMNS]
+
+
+def _validate_cleaned_output_columns(
+    frame: pd.DataFrame,
+    column_names: Sequence[str],
+) -> None:
+    """Ensure exported telemetry exactly matches ``headers.csv`` and its order."""
+    expected = _cleaned_output_columns(column_names)
+    actual = frame.columns.tolist()
+    if actual != expected:
+        raise ValueError(
+            "Cleaned export columns do not match metadata plus headers.csv: "
+            f"expected {expected}, got {actual}"
+        )
+
+
 def _export_cleaned_drive(
     drive_file: DriveFile,
     column_names: Sequence[str],
@@ -159,6 +178,7 @@ def _export_cleaned_drive(
 ) -> dict[str, object]:
     """Write one cleaned drive CSV and return its cleaning diagnostics."""
     output_path = output_dir / _clean_output_name(drive_file)
+    output_columns = _cleaned_output_columns(column_names)
     first_chunk = True
     previous_reaction_time: float | None = None
     report: dict[str, object] = {
@@ -189,7 +209,7 @@ def _export_cleaned_drive(
             numeric = pd.to_numeric(driving_rows[column], errors="coerce")
             report[report_column] += int(numeric.eq(HEADWAY_SENTINEL).sum())
 
-        cleaned = clean_analysis_columns(driving_rows)
+        cleaned = clean_analysis_columns(driving_rows, column_names)
         reaction_time = cleaned["Reaction Time"]
         positive = reaction_time.gt(0)
         previous = reaction_time.shift(1)
@@ -207,13 +227,17 @@ def _export_cleaned_drive(
         if not reaction_time.empty:
             previous_reaction_time = reaction_time.iloc[-1]
 
-        metadata = {
-            "participant_id": drive_file.participant_id,
-            "visit": drive_file.visit,
-            "session_date": drive_file.session_date,
-            "drive": drive_file.drive,
-        }
-        cleaned = cleaned.assign(**metadata).loc[:, CLEANED_OUTPUT_COLUMNS]
+        metadata = pd.DataFrame(
+            {
+                "participant_id": drive_file.participant_id,
+                "visit": drive_file.visit,
+                "session_date": drive_file.session_date,
+                "drive": drive_file.drive,
+            },
+            index=cleaned.index,
+        )
+        cleaned = pd.concat([metadata, cleaned], axis="columns")
+        _validate_cleaned_output_columns(cleaned, column_names)
         cleaned.to_csv(
             output_path,
             mode="w" if first_chunk else "a",
@@ -223,7 +247,9 @@ def _export_cleaned_drive(
         first_chunk = False
 
     if first_chunk:
-        pd.DataFrame(columns=CLEANED_OUTPUT_COLUMNS).to_csv(output_path, index=False)
+        empty = pd.DataFrame(columns=output_columns)
+        _validate_cleaned_output_columns(empty, column_names)
+        empty.to_csv(output_path, index=False)
     return report
 
 
@@ -247,6 +273,9 @@ def export_cleaned_dataset(
     )
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+    load_header_mapping(data_root).to_csv(
+        output_path / "header_mapping.csv", index=False
+    )
 
     reports: list[dict[str, object]] = []
     for drive_file in discover_drive_files(data_root, participant_ids):
