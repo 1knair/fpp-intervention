@@ -4,6 +4,7 @@ This module handles file-system work only. It does not calculate any driving
 metrics or change the raw study files.
 """
 
+import csv
 from dataclasses import dataclass
 from datetime import datetime
 import os
@@ -243,6 +244,29 @@ def load_headers(data_root: str | Path) -> list[str]:
     if duplicates:
         raise ValueError(f"headers.csv contains duplicate columns: {duplicates}")
     return headers
+
+
+def load_header_mapping(data_root: str | Path) -> pd.DataFrame:
+    """Map raw header text by position to the names produced by Pandas."""
+    headers_file = Path(data_root) / "headers.csv"
+    exported_headers = load_headers(data_root)
+    with headers_file.open("r", encoding="utf-8-sig", newline="") as stream:
+        raw_headers = next(csv.reader(stream), [])
+
+    if len(raw_headers) != len(exported_headers):
+        raise ValueError(
+            "Could not map headers.csv fields to exported column names: "
+            f"found {len(raw_headers)} raw fields and "
+            f"{len(exported_headers)} Pandas columns"
+        )
+
+    return pd.DataFrame(
+        {
+            "telemetry_column_position": range(1, len(raw_headers) + 1),
+            "raw_header_text": raw_headers,
+            "exported_pandas_column_name": exported_headers,
+        }
+    )
 
 
 def _first_data_field_count(file_path: Path) -> int:

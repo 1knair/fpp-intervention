@@ -3,7 +3,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.pipeline import process_dataset
+from src.preprocessing import ANALYSIS_COLUMNS
+from src.pipeline import export_cleaned_dataset, process_dataset
 
 
 def test_pipeline_streams_one_synthetic_drive(tmp_path: Path) -> None:
@@ -46,3 +47,102 @@ def test_pipeline_streams_one_synthetic_drive(tmp_path: Path) -> None:
         "mean_velocity",
         "max_velocity",
     ]
+
+
+def test_cleaned_export_keeps_all_headers_in_exact_order(tmp_path: Path) -> None:
+    raw_headers = [
+        "Unused Before",
+        "DriveID",
+        "Gear",
+        *ANALYSIS_COLUMNS,
+        "Unused After",
+        "DriveID",
+    ]
+    exported_headers = [*raw_headers[:-1], "DriveID.1"]
+    rows = [
+        [
+            "bad",
+            101,
+            3,
+            0,
+            10,
+            1,
+            200,
+            10000,
+            10000,
+            0.1,
+            0.5,
+            0,
+            0,
+            25,
+            1,
+            101,
+        ],
+        [
+            2,
+            101,
+            3,
+            1,
+            20,
+            2,
+            100,
+            2,
+            30,
+            0.2,
+            0.5,
+            0,
+            0,
+            25,
+            float("inf"),
+            101,
+        ],
+        [3, 101, 1, 2, 30, 3, 200, 3, 40, 0.3, 1.0, 0, 0, 25, 3, 101],
+    ]
+    (tmp_path / "headers.csv").write_text(
+        ",".join(raw_headers) + "\n", encoding="utf-8"
+    )
+    session = tmp_path / "002" / "T1_20260918"
+    session.mkdir(parents=True)
+    pd.DataFrame(rows).to_csv(
+        session / "FPP_Sub_002_Drive_1.plt",
+        sep=" ",
+        header=False,
+        index=False,
+    )
+    output_dir = tmp_path / "cleaned"
+
+    report = export_cleaned_dataset(tmp_path, output_dir, chunksize=1)
+
+    cleaned = pd.read_csv(
+        output_dir / "participant_002_T1_2026-09-18_drive_1_cleaned.csv"
+    )
+    assert cleaned.columns.tolist() == [
+        "participant_id",
+        "visit",
+        "session_date",
+        "drive",
+        *exported_headers,
+        "brake_force_over_170",
+    ]
+    assert len(cleaned) == 2
+    assert cleaned["Gear"].tolist() == [3, 3]
+    assert cleaned["Unused Before"].isna().tolist() == [True, False]
+    assert cleaned["Unused After"].isna().tolist() == [False, True]
+    assert cleaned["Headway Time"].isna().tolist() == [True, False]
+    assert cleaned["Headway Distance"].isna().tolist() == [True, False]
+    assert cleaned["Reaction Time"].tolist() == [0.5, 0.5]
+    assert cleaned["brake_force_over_170"].tolist() == [True, False]
+    assert report.loc[0, "positive_reaction_time_rows"] == 2
+    assert report.loc[0, "consecutive_repeated_reaction_time_rows"] == 1
+
+    mapping = pd.read_csv(output_dir / "header_mapping.csv")
+    assert mapping.columns.tolist() == [
+        "telemetry_column_position",
+        "raw_header_text",
+        "exported_pandas_column_name",
+    ]
+    assert mapping["telemetry_column_position"].tolist() == list(
+        range(1, len(raw_headers) + 1)
+    )
+    assert mapping["raw_header_text"].tolist() == raw_headers
+    assert mapping["exported_pandas_column_name"].tolist() == exported_headers
