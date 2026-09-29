@@ -8,8 +8,8 @@ import logging
 from pathlib import Path
 
 # These helpers locate participants and run the processing pipeline.
-from src.data_loader import get_data_root, get_participants
-from src.pipeline import export_cleaned_dataset, process_dataset
+from src.cleaning.data_loader import get_data_root, get_participants
+from src.cleaning.pipeline import export_cleaned_dataset, process_dataset
 
 
 def build_parser() -> argparse.ArgumentParser:

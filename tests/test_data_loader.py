@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.data_loader import (
+from src.cleaning.data_loader import (
     TelemetryFileError,
     discover_drive_files,
     get_data_root,

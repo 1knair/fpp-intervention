@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.preprocessing import filter_driving_rows
+from src.cleaning.preprocessing import filter_driving_rows
 
 
 def test_filter_driving_rows_keeps_only_gear_three_and_preserves_input() -> None:

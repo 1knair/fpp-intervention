@@ -3,8 +3,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.preprocessing import ANALYSIS_COLUMNS
-from src.pipeline import export_cleaned_dataset, process_dataset
+from src.cleaning.preprocessing import ANALYSIS_COLUMNS
+from src.cleaning.pipeline import export_cleaned_dataset, process_dataset
 
 
 def test_pipeline_streams_one_synthetic_drive(tmp_path: Path) -> None:

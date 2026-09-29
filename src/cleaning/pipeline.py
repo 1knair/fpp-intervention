@@ -10,7 +10,7 @@ from typing import Sequence
 
 import pandas as pd
 
-from src.data_loader import (
+from src.cleaning.data_loader import (
     DriveFile,
     TelemetryFileError,
     discover_drive_files,
@@ -18,8 +18,8 @@ from src.data_loader import (
     load_header_mapping,
     load_headers,
 )
-from src.metrics import MetricAccumulator, REQUIRED_SUMMARY_COLUMNS
-from src.preprocessing import (
+from src.cleaning.metrics import MetricAccumulator, REQUIRED_SUMMARY_COLUMNS
+from src.cleaning.preprocessing import (
     ANALYSIS_COLUMNS,
     HEADWAY_SENTINEL,
     clean_analysis_columns,
