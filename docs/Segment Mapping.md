@@ -1,0 +1,18 @@
+| Telemetry Header                                  | Behavior                                                                                                                                                                                 | Type               |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Intersections<br><br><br><br><br><br><br><br><br> | 0: any time outside inter<br>- default<br>- just before entering, even while yielded<br>- just after exiting<br><br>1: only inside inter<br>- moment you enter until moment you exit<br> | Boolean, switch    |
+| Signs                                             | 0: default<br>n: mph, briefly when speed limit sign passes<br>c:                                                                                                                         | Number/code, pulse |
+| Speed Limit                                       |                                                                                                                                                                                          | Number, switch     |
+| Event                                             | 1: collision avoidance (car pulling out)                                                                                                                                                 | Code, pulse        |
+
+**Scenario 1**
+Regular intersection, 0:30
+
+| Event                                      | Direct Data Markers                                                                                                                       | ~Time                                                       | Video Markers                                                         | Notes                                                |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------- |
+| Roundabout                                 | *Signs* = 35<br>*Speed Limit* = 35<br>*Signs* = -3<br>*Speed Limit* = 10<br><br>**==*Intersections* = 1==**<br>- P3T2 exception??<br><br> | a<br><br>b<br><br>c<br>1:25/1:25/1:25                       | 35mph sign<br><br>R/about 10mph sign<br><br>Yield sign                |                                                      |
+| Collision Avoidance<br>(car pulls out)<br> | **==*Events = 1*==**                                                                                                                      | 3:00/3:00/?                                                 |                                                                       | Recovery period                                      |
+| Speed Hump                                 | *Signs* = 25<br>*Speed Limit = 25*<br><br>???<br>==*Z Position*==<br>- this sucks<br>                                                     | ?/?/4:00<br><br><br>3:30/?/?<br>3:30/?/4:25<br><br>3:35/?/? | 25mph sign<br><br><br>Speed hump sign<br>Speed hump<br><br>25mph sign | Clinician rule:<br>slow to ≤15mph<br>before crossing |
+Check
+	Recovery period (extra time) after collision avoidance in S3, 2-4 seconds ish. location based pulses
+
