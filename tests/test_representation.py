@@ -1,5 +1,4 @@
-from src.representation.features import calc_drive
-from src.representation.pipeline import build_feature_table
+from src.representation.representation import calc_stats, build_feature_table
 import pandas as pd
 import pytest
 
@@ -10,8 +9,8 @@ def sample_recording():
         "Acceleration": [-5.8, 1.5, 2.5],
     })
 
-def test_calc_drive():
-    result = calc_drive(sample_recording())
+def test_calc_summary_stats():
+    result = calc_stats(sample_recording())
 
     assert result == pytest.approx({
         "velocity_mean": 29.166667,
@@ -28,7 +27,7 @@ def test_missing_values():
     frame = sample_recording()
     frame.loc[2, "Velocity"] = float("nan")
     frame["Acceleration"] = float("nan")
-    result = calc_drive(frame)
+    result = calc_stats(frame)
 
     # expect to ignore missing telemetry
     assert result["velocity_mean"] == pytest.approx(21.25)
@@ -41,13 +40,13 @@ def test_build_feature_table(tmp_path):
     # sample recordings -> CSVs -> pipeline -> feature table; check metadata, feats & saved output in temp path
     in_dir = tmp_path / "cleaned"
     in_dir.mkdir()
-    out_path = tmp_path / "features" / "drive_features.csv"
+    out_path = tmp_path / "features" / "drive_stats.csv"
     for visit in ("T1", "T2"):
         sample_recording().to_csv(
             in_dir / "participant_002_{}_2025-04-21_drive_2_cleaned.csv".format(visit),
             index=False,
         )
-    result = build_feature_table(in_dir, out_path, "drive")
+    result = build_feature_table(in_dir, tmp_path, "drive_stats")
     res_frame = pd.read_csv(out_path, dtype={"participant_id": str})
 
     assert len(result) == 2
