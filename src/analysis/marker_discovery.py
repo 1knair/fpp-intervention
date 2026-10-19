@@ -1,38 +1,4 @@
-"""Exploratory marker extraction, scenario comparison, and evidence reports.
-
-Intervals use zero-based [start_row, end_row) bounds. End time is the timestamp
-at the exclusive boundary (NA at EOF); duration uses first/last active samples,
-not a guessed sampling period. Missing samples break continuity. Pulses are
-single non-default samples bounded by observed defaults; negative codes survive.
-
-RT update episodes cluster actual value changes, including zero resets, with a
-configurable stable gap. Initial positive states alone are not updates. Episode
-end rows are exclusive; last_transition_time anchors post-RT windows. Missing
-RT/time or reversed clocks prevent clustering across those boundaries.
-
-Braking summaries preserve raw force, including values above 170 N. Strong-
-braking intervals require an explicit threshold. Post-marker windows exclude
-its timestamp and include the configured end; braking flags mean force > 0 OR
-acceleration < 0. Missing evidence is NA, not false absence.
-
-Per participant/visit, Drive11 supersedes Drive1 and Drive21 supersedes Drive2;
-Drive3 remains Scenario 3. Original drive numbers/files survive. Same-directory
-restart siblings are checked for base-only batch inputs. Duplicate exports stay
-traceable; no files are stitched and no scenario completeness is inferred.
-
-Scenario 1 route context anchors Collision Avoidance 1 on Events 1; nearby RT is
-optional. Collision Avoidance 2 is only a unique unassociated RT candidate wholly
-between Events 1 and 3. RT ordinal never determines collision identity. Event
-context uses chronological (time, row) neighbors: nonzero sign arrivals, actual
-speed changes, active intersections, and nearest RT starts (signed RT-event delta).
-
---event-context and --scenario1-evidence write only their respective reports.
-The main comparison is compact; scenario_comparison_details.csv preserves the
-full comparison. Successful exports print only created file paths. Evidence
-conclusions describe the reviewed candidate patterns, not production segmentation
-or scoring-item mappings.
-All time windows are exploratory/configurable. See README.md and --help.
-"""
+# Exploratory marker extraction, scenario comparison, and evidence reports.
 
 import argparse
 from dataclasses import dataclass
@@ -92,16 +58,6 @@ ROUTE_CONTEXT_COLUMNS = [
     "collision1_rt_candidate_count", "collision2_candidate_count", "post_event_window_s", "route_context_notes",
 ]
 COMPARISON_COLUMNS = [
-    *METADATA_COLUMNS, "scenario", "selection_reason", "row_count", "rt_episode_count",
-    "collision1_event_time", "collision1_rt_time", "collision1_rt_value_change", "collision1_rt_status",
-    "collision1_peak_brake", "collision1_peak_deceleration",
-    "collision2_candidate_rt_time", "collision2_candidate_rt_value_change",
-    "collision2_candidate_peak_brake", "collision2_candidate_peak_deceleration", "collision2_candidate_status",
-    "events_values_in_order", *(f"events_{code}_start_time" for code in EVENT_CODES),
-    "intersection_count", "sign_values_in_order", "speed_limit_values_in_order",
-    "missing_columns", "notes",
-]
-COMPARISON_DETAIL_COLUMNS = [
     *METADATA_COLUMNS, "rt_episode_count",
     *(f"rt{number}_{field}" for number in (1, 2) for field in (
         "start_time", "end_time", "value_change", "peak_brake_after", "peak_deceleration_after",
@@ -631,7 +587,7 @@ def _comparison_row(
     frame: pd.DataFrame, result: MarkerDiscoveryResult, path: Path,
     rt_transition_gap_s: float, post_rt_window_s: float, events_near_window_s: float,
 ) -> dict:
-    row = {column: pd.NA for column in COMPARISON_DETAIL_COLUMNS}
+    row = {column: pd.NA for column in COMPARISON_COLUMNS}
     row.update({key: result.summary.iloc[0][key] for key in METADATA_COLUMNS})
     row.update(source_file=str(path.resolve()), rt_transition_gap_s=rt_transition_gap_s,
                post_rt_window_s=post_rt_window_s, events_near_window_s=events_near_window_s)
@@ -721,7 +677,6 @@ def compare_recordings(
     dedicated window columns. Duplicate exports remain traceable. Selection
     includes same-directory restarts; preferred_only=False returns the input
     inventory without sibling discovery. Scenario filtering follows selection.
-    The returned table retains the full detail schema; compacting is export-only.
     """
     if scenario is not None and scenario not in (1, 2, 3):
         raise ValueError("scenario must be 1, 2, or 3")
@@ -737,6 +692,7 @@ def compare_recordings(
         if scenario is not None:
             table = table.loc[table.scenario.eq(scenario).fillna(False)].reset_index(drop=True)
     return table
+
 
 
 def _collect_recordings(files: Sequence[str | Path], options: dict, report: str | None = None):
@@ -759,7 +715,7 @@ def _collect_recordings(files: Sequence[str | Path], options: dict, report: str 
                     result, context, options.get("events_near_window_s", DEFAULT_EVENTS_NEAR_WINDOW_S))
         except (ValueError, OSError) as error:
             raise ValueError(f"Could not compare {path}: {error}") from error
-    table = pd.DataFrame(rows, columns=COMPARISON_DETAIL_COLUMNS)
+    table = pd.DataFrame(rows, columns=COMPARISON_COLUMNS)
     duplicates = table.recording_id.duplicated(keep=False)
     table.loc[duplicates, "notes"] += " | Duplicate recording_id across source files; rows retained."
     for column in ("rt_episode_count", "intersection_count", "rt1_after_sample_count", "rt2_after_sample_count", "row_count"):
@@ -902,6 +858,55 @@ def report_recording_chains(comparison: pd.DataFrame) -> pd.DataFrame:
     ):
         report[column] = report[column].astype("Int64")
     return report
+
+
+def print_recording_chains(report: pd.DataFrame, *, concise: bool = False) -> None:
+    """Show restart QC counts and an optional preview."""
+    print(f"Recording-chain QC: {len(report)} original/restart pairs in the input inventory.")
+    print("Restarts supersede originals for analysis; original files are preserved. Scenario completeness is not inferred.")
+    if not concise and not report.empty:
+        print(report.loc[:, [
+            "participant_id", "visit", "base_drive", "related_drive", "base_row_count", "related_row_count",
+            "base_rt_episode_count", "related_rt_episode_count", "relationship_status",
+        ]].head(20).astype(object).fillna("NA").to_string(index=False))
+
+
+def print_comparison(table: pd.DataFrame, *, concise: bool = False) -> None:
+    """Print descriptive counts with explicit known-data denominators."""
+    print(f"Scenario comparison: {len(table)} recordings (exploratory)")
+    print("Counts are per recording; selected files are not assumed to cover complete scenarios.")
+    if table.empty:
+        print("No preferred recordings match the requested scenario.")
+        return
+    settings = table.iloc[0]
+    print(f"Settings: RT transition gap {settings.rt_transition_gap_s:g} s; "
+          f"post-RT window {settings.post_rt_window_s:g} s; "
+          f"Events proximity tolerance {settings.events_near_window_s:g} s")
+    known = table.rt_episode_count.dropna()
+    print(f"Exactly two RT update episodes: {int(known.eq(2).sum())}/{len(known)} known; "
+          f"{table.rt_episode_count.isna().sum()} unavailable")
+    for column in ("events_1_near_rt1", "braking_after_rt1", "braking_after_rt2",
+                   "events_3_present", "events_4_present", "events_5_present"):
+        print(f"{column}: {int(table[column].sum())}/{table[column].notna().sum()} known; "
+              f"{table[column].isna().sum()} unavailable")
+    print("Intersection count frequencies: " + str(table.intersection_count.dropna().value_counts().sort_index().to_dict()))
+    print("Post-RT windows start after the last RT change; braking means force > 0 OR acceleration < 0.")
+    if concise:
+        return
+    print(table.loc[:, ["recording_id", "drive", "rt_episode_count", "collision1_rt_status",
+                        "collision2_candidate_status", "rt1_peak_brake_after", "rt2_peak_brake_after"]]
+          .head(10).astype(object).fillna("NA").to_string(index=False))
+    advisories = table.loc[table.notes.str.len().gt(0), ["recording_id", "notes"]]
+    if not advisories.empty:
+        print(f"Advisories (first 5 of {len(advisories)} recordings):")
+        print(advisories.head(5).to_string(index=False))
+
+
+def print_selection(report: pd.DataFrame, *, concise: bool = False) -> None:
+    """Expose selection reasons even when no output directory is requested."""
+    print(f"Preferred recording selection: {len(report)} audit rows.")
+    if not concise and not report.empty:
+        print(report.loc[:, SELECTION_COLUMNS[:8]].head(20).astype(object).fillna("NA").to_string(index=False))
 
 
 def build_event_context(frame: pd.DataFrame, result: MarkerDiscoveryResult) -> pd.DataFrame:
@@ -1090,34 +1095,43 @@ def summarize_scenario1_evidence(records: Sequence[dict], **settings) -> pd.Data
     return table
 
 
-def output_event_context(table: pd.DataFrame, output_dir: Path | None) -> list[Path]:
-    """Write event context and return only paths successfully created."""
-    if output_dir is None:
-        return []
-    output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / "event_context.csv"
-    table.to_csv(path, index=False, na_rep="NA")
-    return [path]
+def output_event_context(table: pd.DataFrame, output_dir: Path | None) -> None:
+    """Export event context with a bounded terminal preview."""
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        table.to_csv(output_dir / "event_context.csv", index=False, na_rep="NA")
+    print(f"Event context: {len(table)} nonzero Events intervals from {table.recording_id.nunique()} recordings.")
+    print("Chronological marker context only; RT delta = RT episode start minus event start.")
+    if output_dir is None and not table.empty:
+        print(table.head(30).astype(object).fillna("NA").to_string(index=False))
+    if output_dir is not None:
+        print(f"Event context CSV: {output_dir / 'event_context.csv'}")
 
 
-def write_outputs(result: MarkerDiscoveryResult, output_dir: str | Path, recording_id: str) -> list[Path]:
-    """Export the four single-recording tables and return their paths."""
+def write_outputs(result: MarkerDiscoveryResult, output_dir: str | Path, recording_id: str) -> None:
+    """Export the four single-recording tables."""
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
-    created = []
     for name in SINGLE_OUTPUTS:
-        path = directory / f"{recording_id}_{name}.csv"
-        getattr(result, name).to_csv(path, index=False, na_rep="NA")
-        created.append(path)
-    return created
+        getattr(result, name).to_csv(directory / f"{recording_id}_{name}.csv", index=False, na_rep="NA")
 
 
-def print_created(paths: Sequence[Path]) -> None:
-    """Report written files without printing analysis or routine diagnostics."""
-    if paths:
-        print("Created:")
-        for path in paths:
-            print(path)
+def print_summary(result: MarkerDiscoveryResult, *, concise: bool = False) -> None:
+    """Keep key counts/advisories visible; CSV exports suppress repeated tables."""
+    summary = result.summary
+    print(f"Recording: {summary.iloc[0]['recording_id']}")
+    missing = summary.loc[summary.metric.eq("available") & summary.value.eq(False), "column"].tolist()
+    print("Missing columns: " + (", ".join(missing) if missing else "none"))
+    print("Rows are zero-based; interval end rows are exclusive. Duration uses first/last active samples.")
+    metrics = ["advisory", "maximum", "peak_row", "peak_time", "brake_threshold",
+               "collision1_rt_status", "collision2_candidate_status"]
+    print(summary.loc[summary.metric.isin(metrics), ["column", "metric", "value"]]
+          .astype(object).fillna("NA").to_string(index=False))
+    print(f"RT update episodes: {len(result.rt_update_episodes)} (exploratory)")
+    print(f"Combined chronological log: {len(result.transitions)} records")
+    if not concise and not result.transitions.empty:
+        print(result.transitions.loc[:, ["sim_time", "row", "column", "record_type", "previous_value", "new_value"]]
+              .head(20).astype(object).fillna("NA").to_string(index=False))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1128,7 +1142,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="Batch: input recordings; prefer same-participant/visit restart recordings")
     inputs.add_argument("--glob", dest="glob_pattern", help="Batch: quoted cleaned-CSV glob; supports **")
     inputs.add_argument("--directory", type=Path, help="Batch: recursively find *_cleaned.csv in this directory")
-    parser.add_argument("--output-dir", type=Path, help="Write CSV tables here; omit to validate without writing or success output")
+    parser.add_argument("--output-dir", type=Path, help="Write CSV tables here (e.g. outputs/marker_discovery)")
     parser.add_argument("--brake-threshold", type=float, default=None,
                         help="Optional positive force in N; classify intervals at or above this value")
     for flag, default, description in (
@@ -1150,17 +1164,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     options = dict(brake_threshold=args.brake_threshold, rt_transition_gap_s=args.rt_transition_gap,
                    post_rt_window_s=args.post_rt_window, events_near_window_s=args.events_near_window,
                    post_event_window_s=args.post_event_window)
-    created = []
+    concise = args.output_dir is not None
     try:
         if args.file is not None:
             if args.scenario is not None or args.scenario1_evidence:
                 parser.error("--scenario and --scenario1-evidence require batch input (--files, --glob, or --directory)")
             frame, result = _read_recording(args.file, **options)
             if args.event_context:
-                created = output_event_context(build_event_context(frame, result), args.output_dir)
-            elif args.output_dir is not None:
-                created = write_outputs(result, args.output_dir, args.file.stem)
-            print_created(created)
+                output_event_context(build_event_context(frame, result), args.output_dir)
+            else:
+                if concise:
+                    write_outputs(result, args.output_dir, args.file.stem)
+                print_summary(result, concise=concise)
+                if concise:
+                    print(f"CSV outputs: {args.output_dir}")
             return 0
         if args.scenario1_evidence and args.scenario not in (None, 1):
             parser.error("--scenario1-evidence applies only to Scenario 1")
@@ -1177,30 +1194,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             selected_details = [details[file] for file in comparison.source_file]
             if args.event_context:
                 context = pd.concat(selected_details, ignore_index=True) if selected_details else pd.DataFrame(columns=EVENT_CONTEXT_COLUMNS)
-                created = output_event_context(context, args.output_dir)
+                output_event_context(context, args.output_dir)
             else:
                 evidence = summarize_scenario1_evidence(selected_details, **options)
-                if args.output_dir is not None:
+                if concise:
                     args.output_dir.mkdir(parents=True, exist_ok=True)
-                    path = args.output_dir / "scenario1_marker_evidence.csv"
-                    evidence.to_csv(path, index=False, na_rep="NA")
-                    created.append(path)
-            print_created(created)
+                    evidence.to_csv(args.output_dir / "scenario1_marker_evidence.csv", index=False, na_rep="NA")
+                print(evidence.loc[:, ["maneuver", "recordings_evaluated", "recordings_matching", "status"]]
+                      .astype(object).fillna("NA").to_string(index=False))
             return 0
         chains = report_recording_chains(inventory)
         if scenario is not None:
             chains = chains.loc[chains.base_drive.eq(scenario)].reset_index(drop=True)
-        if args.output_dir is not None:
+        if concise:
             args.output_dir.mkdir(parents=True, exist_ok=True)
-            for name, table in (
-                ("scenario_comparison", comparison.loc[:, COMPARISON_COLUMNS]),
-                ("recording_selection", selection), ("recording_chain_qc", chains),
-                ("scenario_comparison_details", comparison),
-            ):
-                path = args.output_dir / f"{name}.csv"
-                table.to_csv(path, index=False, na_rep="NA")
-                created.append(path)
-        print_created(created)
+            for name, table in (("scenario_comparison", comparison), ("recording_chain_qc", chains),
+                                ("recording_selection", selection)):
+                table.to_csv(args.output_dir / f"{name}.csv", index=False, na_rep="NA")
+        print_comparison(comparison, concise=concise)
+        print_selection(selection, concise=concise)
+        print_recording_chains(chains, concise=concise)
+        if concise:
+            print(f"CSV outputs: {args.output_dir}")
     except (ValueError, OSError, pd.errors.ParserError) as error:
         parser.error(str(error))
     return 0
