@@ -1,0 +1,17 @@
+﻿"target_set","ratings","score_name"
+"safety13","safety_roundabout
+safety_collision1
+safety_left1
+safety_left2
+safety_pedestrian
+safety_cyclist
+safety_collision2
+safety_straight_stop
+safety_lane_change
+safety_lane_flow
+safety_kfc_entry
+safety_kfc_path
+safety_kfc_exit","Safety-grade sum (13 ratings)"
+"speed3","hump1_error
+four_lane_error
+resume_speed_error","Speed-error sum (3 ratings)"

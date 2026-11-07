@@ -41,3 +41,6 @@ htmlcov/
 # Operating system metadata
 .DS_Store
 Thumbs.db
+
+# Local scratch work
+/tmp/

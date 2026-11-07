@@ -1,0 +1,6 @@
+﻿"experiment","enabled","feature_set","target_set","model","alpha","test_all_ratings","test_feature_subsets","hidden_layers","max_iter","seed","notes"
+"general_safety_ridge","true","general_driving","safety13","ridge","10","true","false","","","",""
+"event_safety_ridge","true","event_driving","safety13","ridge","10","true","false","","","",""
+"combined_safety_ridge","true","combined_driving","safety13","ridge","10","true","false","","","",""
+"speed_raw_linear","true","best_speed_raw","speed3","linear","","true","false","","","",""
+"speed_shortfalls_linear","true","best_speed_shortfalls","speed3","linear","","true","false","","","",""
